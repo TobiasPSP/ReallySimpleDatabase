@@ -18,6 +18,9 @@ ModuleVersion = '1.0'
 # Unique Module ID
 GUID = '39538ca5-9ed9-4ee2-945e-393c246ac916'
 
+# Prefix
+Prefix = 'Simple'
+
 # Module Author
 Author = 'Dr. Tobias Weltner'
 
