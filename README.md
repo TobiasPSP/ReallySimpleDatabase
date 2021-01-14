@@ -19,7 +19,7 @@ There are no additional dependencies required, and the SQLite database created i
 
 To create a new SQLite database (or open an existing database), use `Get-Database`:
 
-```powershell
+```
 PS> $database = Get-Database -Path $env:temp\mydb.db
 PS> $database
 
@@ -84,7 +84,7 @@ Services  292   :Name,RequiredServices,CanPauseAndContinue,CanShutdown,CanStop,D
 
 Use standard **SQL** to read data from a database:
 
-```powershell
+```
 PS> $database = Get-Database -Path $env:temp\mydb.db
 PS> $database.InvokeSql('select * from processes where name like "a%"') | Format-Table
 
@@ -93,3 +93,47 @@ Name                 SI Handles            VM        WS       PM   NPM Path
 ApplicationFrameHost  1     460 2203637399552 110505984 61837312 27328 C:\WINDOWS\sy...
 armsvc                0     123      69296128   6488064  1630208  8688
 ```
+
+## Example: Dump Chrome Passwords
+
+The browser *Chrome* uses a **SQLite** database to internally store password data. The user can dump this information like so:
+
+```powershell
+# default path to Chrome user passwords database:
+$Path = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"
+# check whether database exists:
+$exists = Test-Path -Path $path -PathType Leaf
+# if it is missing, then you might not be using the Google Chrome browser:
+if (!$exists)
+{
+  Write-Warning "No Chrome Database found."
+  return
+}
+
+# define function to decrypt encrypted text
+function Unprotect-Secret($value)
+{
+  Add-Type -AssemblyName System.Security
+  $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($value,$null,[System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+  [System.Text.Encoding]::Default.GetString($bytes)
+}
+
+# copy the database (the original file is locked while Chrome is running):
+$Destination = "$env:temp\database.db"
+Copy-Item -Path $Path -Destination $Destination
+
+# query to retrieve the cached passwords:
+$sql = "SELECT action_url, username_value, password_value FROM logins"
+
+#region define calculated properties
+# rename column headers:
+$url = @{N='Url';E={$_.action_url}}
+$username = @{N='Username';E={$_.username_value}}
+$password = @{N='Password'; E={Unprotect-Secret -Secret $_.password_value}} 
+#endregion define calculated properties                          
+
+$db = Get-Database -Path $Destination
+$db.InvokeSql($sql) | Select-Object $url, $username,$password 
+```
+
+Note that only the user who saved the passwords can dump them. Chrome uses the Windows cryptography API which protects the passwords by using the machine and user identity.
